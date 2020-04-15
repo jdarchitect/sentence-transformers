@@ -5,10 +5,19 @@ Sentences are mapped to sentence embeddings and then k-mean clustering is applie
 """
 from sentence_transformers import SentenceTransformer
 from sklearn.cluster import KMeans
+import csv
+
+corpus = []
+with open('changed-sentences.csv', newline='') as csvfile:
+    textreader = csv.reader(csvfile, dialect='excel')
+    for row in textreader:
+        corpus.append(row[2])
+print(corpus)
 
 embedder = SentenceTransformer('bert-base-nli-mean-tokens')
 
 # Corpus with example sentences
+"""
 corpus = ['A man is eating food.',
           'A man is eating a piece of bread.',
           'A man is eating pasta.',
@@ -21,6 +30,8 @@ corpus = ['A man is eating food.',
           'A cheetah is running behind its prey.',
           'A cheetah chases prey on across a field.'
           ]
+
+"""
 corpus_embeddings = embedder.encode(corpus)
 
 # Perform kmean clustering
