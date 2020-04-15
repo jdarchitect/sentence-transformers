@@ -29,7 +29,7 @@ class SentenceTransformer(nn.Sequential):
             logging.info("Load pretrained SentenceTransformer: {}".format(model_name_or_path))
 
             if '/' not in model_name_or_path and '\\' not in model_name_or_path and not os.path.isdir(model_name_or_path):
-                logging.info("Did not find a / or \\ in the name. Assume to download model from server")
+                logging.info("Did not find a '/' or '\\' in the name. Assume to download model from server.")
                 model_name_or_path = __DOWNLOAD_SERVER__ + model_name_or_path + '.zip'
 
             if model_name_or_path.startswith('http://') or model_name_or_path.startswith('https://'):
@@ -90,19 +90,25 @@ class SentenceTransformer(nn.Sequential):
         self.device = torch.device(device)
         self.to(device)
 
-    def encode(self, sentences: List[str], batch_size: int = 8, show_progress_bar: bool = None) -> List[ndarray]:
+    def encode(self, sentences: List[str], batch_size: int = 8, show_progress_bar: bool = None, output_value: str = 'sentence_embedding', convert_to_numpy: bool = True) -> List[ndarray]:
         """
-       Computes sentence embeddings
+        Computes sentence embeddings
 
-       :param sentences:
+        :param sentences:
            the sentences to embed
-       :param batch_size:
+        :param batch_size:
            the batch size used for the computation
-       :param show_progress_bar:
+        :param show_progress_bar:
             Output a progress bar when encode sentences
-       :return:
-           a list with ndarrays of the embeddings for each sentence
-       """
+        :param output_value:
+            Default sentence_embedding, to get sentence embeddings. Can be set to token_embeddings
+            to get wordpiece token embeddings.
+        :param convert_to_numpy:
+            If true, the output is a list of numpy vectors. Else, it is a list of pytorch tensors.
+        :return:
+           Depending on convert_to_numpy, either a list of numpy vectors or a list of pytorch tensors
+        """
+        self.eval()
         if show_progress_bar is None:
             show_progress_bar = (logging.getLogger().getEffectiveLevel()==logging.INFO or logging.getLogger().getEffectiveLevel()==logging.DEBUG)
 
@@ -140,8 +146,18 @@ class SentenceTransformer(nn.Sequential):
                 features[feature_name] = torch.tensor(np.asarray(features[feature_name])).to(self.device)
 
             with torch.no_grad():
-                embeddings = self.forward(features)
-                embeddings = embeddings['sentence_embedding'].to('cpu').numpy()
+                out_features = self.forward(features)
+                embeddings = out_features[output_value]
+
+                if output_value == 'token_embeddings':
+                    #Set token embeddings to 0 for padding tokens
+                    input_mask = out_features['input_mask']
+                    input_mask_expanded = input_mask.unsqueeze(-1).expand(embeddings.size()).float()
+                    embeddings = embeddings * input_mask_expanded
+
+                if convert_to_numpy:
+                    embeddings = embeddings.to('cpu').numpy()
+
                 all_embeddings.extend(embeddings)
 
         reverting_order = np.argsort(length_sorted_idx)
@@ -292,6 +308,7 @@ class SentenceTransformer(nn.Sequential):
 
         loss_models = [loss for _, loss in train_objectives]
         device = self.device
+
         for loss_model in loss_models:
             loss_model.to(device)
 
